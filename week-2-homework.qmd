@@ -1,0 +1,170 @@
+---
+title: "Statistical Thinking Week 2 Homework"
+format: pdf 
+---
+
+# Chapter 4 Questions
+
+**4E1.** In the model definition below, which line is the likelihood?
+
+$$
+\begin{align}
+y_i &\sim \text{Normal}(\mu, \sigma) \\
+\mu &\sim \text{Normal}(0, 10) \\
+\sigma &\sim \text{Exponential}(1)
+\end{align}
+$$
+
+$y_i$ represents the likelihood
+
+**4E2.** In the model definition just above, how many parameters are in the posterior distribution?
+
+2 Paramters: $\mu$ and $\sigma$
+
+**4E3.** Using the model definition above, write down the appropriate form of Bayes’ theorem that
+includes the proper likelihood and priors.
+
+$$
+Pr(y_i | \mu, \sigma) = \frac{Pr(\mu, \sigma | y_i )Pr(y_i)}{Pr(\mu, \sigma)}
+$$
+
+**4E4.** In the model definition below, which line is the linear model?
+
+$$
+\begin{align}
+y_i &\sim \text{Normal}(\mu, \sigma) \\
+\mu &= \alpha + \beta x_i \\
+\alpha &\sim \text{Normal}(0, 10) \\
+\beta &\sim \text{Normal}(0, 1) \\
+\sigma &\sim \text{Exponential}(1)
+\end{align}
+$$
+
+The Second Line
+
+**4E5.** In the model definition just above, how many parameters are in the posterior distribution?
+
+3: $\sigma$, $\alpha$, and $\beta$
+
+# Week 2 Homework
+
+```{r}
+#| echo: false
+suppressWarnings(suppressMessages(library(tidyverse)))
+suppressWarnings(suppressMessages(library(rethinking)))
+suppressWarnings(suppressMessages(library(dagitty)))
+suppressWarnings(suppressMessages(library(ggdag)))
+```
+
+**1.** From the Howell1 dataset, consider only the people younger than 13 years old. Estimate the causal association between age and weight. Assume that age influences weight through two paths. First, age influences height, and height influences weight. Second, age directly influences weight through age-related changes in muscle growth and body proportions.
+
+Draw the DAG that represents these causal relationships. And then write a generative simulation that takes age as an input and simulates height and weight, obeying the relationships in the DAG.
+
+Lets first draw the dag:
+
+```{r}
+
+dagified = ggdag::dagify(
+    h ~ a,
+    w ~ h,
+    w ~ a,
+    exposure = "a",
+    outcome = "w"
+)
+
+ggdag::ggdag(dagified) + theme_void()
+```
+
+Here is our simulation
+```{r}
+#| echo: false
+data(Howell1)
+
+data = Howell1 %>% 
+    filter(age <= 13)
+```
+
+```{r}
+sim_weight = function(A, bAH = 5, bAW = 0.5, bHW = 0.1) {
+    n = length(A)
+    H = rnorm(n, bAH*A, 2)
+    W = rnorm(n, bAW*A+bHW*H, 2)
+    tibble(Age = A, Height = H, Weight = W)
+}
+
+sim_data = sim_weight(runif(20, 1, 12))
+sim_data
+```
+
+```{r}
+sim_data %>%
+    ggplot() +
+    geom_point(mapping = aes(x = Age, y = Height))
+```
+
+```{r}
+sim_data %>% 
+    ggplot() +
+    geom_point(mapping = aes(x = Age, y = Weight))
+```
+
+```{r}
+sim_data %>% 
+    ggplot() +
+    geom_point(mapping = aes(x = Height, y = Weight))
+```
+
+**2.** Estimate the total causal effect of each year of growth on weight
+
+Lets first write our assumptions about the model. We will use similar ones to the lecture, namely:
+- when age is 0, weight is 0
+- As age increases, weight increases
+
+So lets create our model, we will assume that Age and Weight have a linear relationship, with a gaussian distribution on error.
+
+$$
+\begin{align}
+W_i &\sim \text{Normal}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta A_i \\
+\alpha &\sim \text{Normal}(0, 10) \\
+\beta &\sim \text{Uniform}(0, 1) \\
+\sigma &\sim \text{Uniform}(0, 10)
+\end{align}
+$$
+
+Using our simulation, we can generate samples
+
+```{r}
+n = 1e3
+a = rnorm(n, 5, 1)
+b = runif(n, 0, 10)
+
+plot = ggplot()
+
+for (i in 1:50) {
+    plot = plot + geom_abline(slope = b[i], intercept = a[i])
+}
+
+plot + 
+    scale_x_continuous(limits = c(0, 14)) + 
+    scale_y_continuous(limits = c(4, 35))
+```
+
+Now lets use quadratic approximation to build a model
+```{r}
+model = quap(
+    alist(
+        W ~ dnorm(mu, sigma),
+        mu <- a + b*A,
+        a ~ dnorm(5, 1),
+        b ~ dunif(0, 10),
+        sigma ~ dexp(1)
+    ),
+    data = list(
+        W = data$weight,
+        A = data$age
+    )
+)
+
+precis(model)
+```

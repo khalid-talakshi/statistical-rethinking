@@ -1,0 +1,67 @@
+---
+title: "Statistical Thinking Week 1 Homework"
+format: html 
+---
+```{r}
+#| echo: false
+suppressMessages(library(tidyverse))
+```
+# Chapter 2 Questions
+
+**2E1.** Which of the expressions below correspond to the statement: the probability of rain on Monday?
+
+Answer: Pr(rain, Monday)/Pr(Monday)
+
+**2E2.** Which of the following statements correspons to the expression: Pr(Monday|rain)?
+
+Answer: The probability of rain, given that it is Monday
+
+**2E3.** Which of the expressions below correspond to the statement: *the probability that it is Monday,
+given that it is raining?*
+
+Answer: Pr(Monday|rain)
+
+# Week 1 Homework
+
+## Question 1
+**Suppose the globe tossing data (Lecture 2, Chapter 2) had turned out to be 3 water and 11 land. Construct the posterior distribution.**
+
+```{r}
+prosterior_dist = function(p, W, L) {
+    return((p^W) * ((1-p)^L))
+}
+
+data = tibble(proportion = seq(from = 0, to = 1, length.out = 11))
+
+obs_W = 3
+obs_L = 11
+
+data = data %>% 
+    mutate(
+        ways = prosterior_dist(proportion, obs_W, obs_L)
+    )
+
+all_ways = sum(data$ways)
+
+data = data %>% 
+    mutate(
+        post = round((ways / all_ways), 3)
+    )
+data
+```
+
+```{r}
+ggplot(data) +
+    geom_line(mapping = aes(x = proportion, y = post))
+```
+
+## Question 2
+**Using the posterior distribution from 1, compute the posterior predictive distribution for the next 5 tosses of the same globe. I recommend you use the sampling method.**
+```{r}
+num_tosses = 5
+
+p_samples <- rbeta(1e4, obs_W + 1, obs_L + 1)
+W_sim <- rbinom(1e4,size=num_tosses ,p=p_samples)
+
+plot(table(W_sim))
+```
